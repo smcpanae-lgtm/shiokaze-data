@@ -36,13 +36,22 @@ async function fetchBatch(baseUrl, points) {
   const lo = points.map((p) => p.lon).join(",");
   const url = `${baseUrl}&latitude=${la}&longitude=${lo}`;
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url);
-    if (res.ok) {
-      const json = await res.json();
-      return Array.isArray(json) ? json : [json];
+    let problem;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+      if (res.ok) {
+        const json = await res.json();
+        return Array.isArray(json) ? json : [json];
+      }
+      if (res.status !== 429 && res.status < 500) throw new Error(`データ提供元のエラー（${res.status}）`, { cause: "no-retry" });
+      problem = `状態 ${res.status}`;
+    } catch (err) {
+      if (err.cause === "no-retry") throw err;
+      problem = err.cause?.code || err.name;
     }
-    if (res.status !== 429 || attempt >= 2) throw new Error(`データ提供元のエラー（${res.status}）`);
-    await sleep(65000); // 回数制限にかかったら1分あけて再試行（最大2回）
+    if (attempt >= 3) throw new Error(`データ提供元に接続できません（${problem}）`);
+    console.log(`再試行します（${problem}）`);
+    await sleep(65000); // 回数制限や接続エラーのときは1分あけて再試行（最大3回）
   }
 }
 
