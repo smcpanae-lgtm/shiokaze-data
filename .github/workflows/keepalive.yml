@@ -1,0 +1,23 @@
+name: 自動実行の停止を防ぐ
+
+# 公開リポジトリの定時実行は60日間活動がないと止まるため、月1回空の commit をする
+on:
+  schedule:
+    - cron: "43 1 1 * *" # 毎月1日 10:43（日本時間）
+  workflow_dispatch: # 手動実行
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 空の commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive"
+          git push
