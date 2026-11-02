@@ -35,8 +35,11 @@ async function fetchBatch(baseUrl, points) {
   const la = points.map((p) => p.lat).join(",");
   const lo = points.map((p) => p.lon).join(",");
   const url = `${baseUrl}&latitude=${la}&longitude=${lo}`;
-  for (let attempt = 0; ; attempt++) {
+  let connectRetries = 0;
+  let slowRetries = 0;
+  while (true) {
     let problem;
+    let isConnectError = false;
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
       if (res.ok) {
@@ -48,10 +51,13 @@ async function fetchBatch(baseUrl, points) {
     } catch (err) {
       if (err.cause === "no-retry") throw err;
       problem = err.cause?.code || err.name;
+      isConnectError = Boolean(err.cause?.code);
     }
-    if (attempt >= 3) throw new Error(`データ提供元に接続できません（${problem}）`);
+    const retries = isConnectError ? connectRetries++ : slowRetries++;
+    if (retries >= (isConnectError ? 6 : 3)) throw new Error(`データ提供元に接続できません（${problem}）`);
     console.log(`再試行します（${problem}）`);
-    await sleep(65000); // 回数制限や接続エラーのときは1分あけて再試行（最大3回）
+    // 接続エラーは10秒あけて再試行（最大6回）。回数制限やサーバーエラーなどは1分あけて再試行（最大3回）
+    await sleep(isConnectError ? 10000 : 65000);
   }
 }
 
